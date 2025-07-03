@@ -1,20 +1,18 @@
-mod claude_simple;
-mod commands;
+mod api;
+mod core;
+mod infrastructure;
 
-use commands::{abort_session, check_claude_auth, check_claude_cli, clear_session, create_session, get_claude_cli_status, quick_claude_check, send_message, AppState};
+use api::commands::{
+    abort_session, check_claude_auth, check_claude_cli, clear_session, create_session,
+    get_claude_cli_status, greet, quick_claude_check, send_message,
+};
+use infrastructure::state::AppState;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let claude_manager = Arc::new(claude_simple::ClaudeManager::new());
-    let app_state = Arc::new(Mutex::new(AppState { claude_manager }));
+    let app_state = Arc::new(Mutex::new(AppState::new()));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

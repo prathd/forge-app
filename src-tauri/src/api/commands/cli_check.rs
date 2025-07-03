@@ -1,122 +1,12 @@
-use crate::claude_simple::{ClaudeManager, QueryOptions};
-use anyhow::Result;
+use crate::api::models::ClaudeCliStatus;
+use crate::core::error::{ErrorResponse, Result};
+use std::env;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tauri::{Emitter, State};
-use tokio::sync::mpsc;
-use tokio::sync::Mutex;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateSessionResponse {
-    pub session_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorResponse {
-    pub error: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeCliStatus {
-    pub installed: bool,
-    pub version: Option<String>,
-    pub authenticated: bool,
-    pub error: Option<String>,
-}
-
-pub struct AppState {
-    pub claude_manager: Arc<ClaudeManager>,
-}
+use tokio::process::Command;
+use tokio::time::{timeout, Duration};
 
 #[tauri::command]
-pub async fn create_session(
-    agent_id: String,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<CreateSessionResponse, ErrorResponse> {
-    let state = state.lock().await;
-    match state.claude_manager.create_session(&agent_id).await {
-        Ok(session_id) => Ok(CreateSessionResponse { session_id }),
-        Err(e) => Err(ErrorResponse {
-            error: e.to_string(),
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn send_message(
-    session_id: String,
-    prompt: String,
-    options: Option<QueryOptions>,
-    window: tauri::Window,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), ErrorResponse> {
-    let state = state.lock().await;
-    let (tx, mut rx) = mpsc::channel(100);
-
-    // Clone values for the spawned task
-    let session_id_clone = session_id.clone();
-    let window_clone = window.clone();
-    let claude_manager = state.claude_manager.clone();
-
-    // Spawn task to handle the query
-    tokio::spawn(async move {
-        if let Err(e) = claude_manager
-            .query(&session_id_clone, &prompt, options, tx)
-            .await
-        {
-            let _ = window_clone.emit("claude-error", ErrorResponse {
-                error: e.to_string(),
-            });
-        }
-    });
-
-    // Spawn task to handle message forwarding
-    tokio::spawn(async move {
-        while let Some(message) = rx.recv().await {
-            let _ = window.emit("claude-message", &message);
-        }
-    });
-
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn abort_session(
-    session_id: String,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), ErrorResponse> {
-    let state = state.lock().await;
-    match state.claude_manager.abort_session(&session_id).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(ErrorResponse {
-            error: e.to_string(),
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn clear_session(
-    session_id: String,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), ErrorResponse> {
-    let state = state.lock().await;
-    match state.claude_manager.clear_session(&session_id).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(ErrorResponse {
-            error: e.to_string(),
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn check_claude_cli() -> Result<bool, ErrorResponse> {
-    use tokio::process::Command;
-    use tokio::time::{timeout, Duration};
-    
+pub async fn check_claude_cli() -> Result<bool> {
     // Check if claude command exists and is executable with a 30 second timeout
     let check_future = async {
         Command::new("claude")
@@ -133,9 +23,7 @@ pub async fn check_claude_cli() -> Result<bool, ErrorResponse> {
             } else {
                 // Command exists but returned an error
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(ErrorResponse {
-                    error: format!("Claude CLI returned an error: {}", stderr),
-                })
+                Err(ErrorResponse::new(format!("Claude CLI returned an error: {}", stderr)))
             }
         }
         Ok(Err(_)) => {
@@ -144,18 +32,13 @@ pub async fn check_claude_cli() -> Result<bool, ErrorResponse> {
         }
         Err(_) => {
             // Timeout occurred
-            Err(ErrorResponse {
-                error: "Claude CLI check timed out after 30 seconds".to_string(),
-            })
+            Err(ErrorResponse::new("Claude CLI check timed out after 30 seconds"))
         }
     }
 }
 
 #[tauri::command]
-pub async fn get_claude_cli_status() -> Result<ClaudeCliStatus, ErrorResponse> {
-    use tokio::process::Command;
-    use tokio::time::{timeout, Duration};
-    
+pub async fn get_claude_cli_status() -> Result<ClaudeCliStatus> {
     let mut status = ClaudeCliStatus {
         installed: false,
         version: None,
@@ -204,9 +87,7 @@ pub async fn get_claude_cli_status() -> Result<ClaudeCliStatus, ErrorResponse> {
 }
 
 #[tauri::command]
-pub async fn quick_claude_check() -> Result<bool, ErrorResponse> {
-    use std::env;
-    
+pub async fn quick_claude_check() -> Result<bool> {
     // Check common CLI locations
     let possible_paths = vec![
         "/usr/local/bin/claude",
@@ -246,10 +127,7 @@ pub async fn quick_claude_check() -> Result<bool, ErrorResponse> {
 }
 
 #[tauri::command]
-pub async fn check_claude_auth() -> Result<bool, ErrorResponse> {
-    use tokio::process::Command;
-    use tokio::time::{timeout, Duration};
-    
+pub async fn check_claude_auth() -> Result<bool> {
     // Try a simpler command that should be faster
     let auth_future = async {
         Command::new("claude")
@@ -278,9 +156,7 @@ pub async fn check_claude_auth() -> Result<bool, ErrorResponse> {
             Ok(false)
         }
         Err(_) => {
-            Err(ErrorResponse {
-                error: "Authentication check timed out".to_string(),
-            })
+            Err(ErrorResponse::new("Authentication check timed out"))
         }
     }
 }
