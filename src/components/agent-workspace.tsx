@@ -232,7 +232,7 @@ export function AgentWorkspace() {
                 <div>
                   <label className="text-sm font-medium">System Prompt</label>
                   <textarea
-                    className="mt-1 w-full rounded-md border p-2 text-sm"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     rows={4}
                     placeholder="Enter a system prompt for your agent..."
                     defaultValue={activeAgent.systemPrompt || ''}
