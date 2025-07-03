@@ -1,8 +1,8 @@
-use crate::claude_simple::{AgentConfig, ClaudeManager, Message, QueryOptions};
+use crate::claude_simple::{ClaudeManager, QueryOptions};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, State};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 
@@ -16,6 +16,15 @@ pub struct CreateSessionResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ErrorResponse {
     pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeCliStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub authenticated: bool,
+    pub error: Option<String>,
 }
 
 pub struct AppState {
@@ -104,7 +113,88 @@ pub async fn clear_session(
 
 #[tauri::command]
 pub async fn check_claude_cli() -> Result<bool, ErrorResponse> {
-    // For now, always return true to allow testing
-    // In production, this would check if Claude CLI is actually installed
-    Ok(true)
+    use std::process::Command;
+    
+    // Check if claude command exists and is executable
+    match Command::new("claude")
+        .arg("--version")
+        .output()
+    {
+        Ok(output) => {
+            // Check if the command executed successfully
+            if output.status.success() {
+                Ok(true)
+            } else {
+                // Command exists but returned an error
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                Err(ErrorResponse {
+                    error: format!("Claude CLI returned an error: {}", stderr),
+                })
+            }
+        }
+        Err(_) => {
+            // Command not found or not executable
+            Ok(false)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn get_claude_cli_status() -> Result<ClaudeCliStatus, ErrorResponse> {
+    use std::process::Command;
+    
+    let mut status = ClaudeCliStatus {
+        installed: false,
+        version: None,
+        authenticated: false,
+        error: None,
+    };
+    
+    // Check if claude command exists and get version
+    match Command::new("claude")
+        .arg("--version")
+        .output()
+    {
+        Ok(output) => {
+            if output.status.success() {
+                status.installed = true;
+                let version_output = String::from_utf8_lossy(&output.stdout);
+                // Extract version from output (format: "claude version X.X.X")
+                if let Some(version_line) = version_output.lines().next() {
+                    if let Some(version) = version_line.strip_prefix("claude version ") {
+                        status.version = Some(version.trim().to_string());
+                    } else {
+                        status.version = Some(version_line.trim().to_string());
+                    }
+                }
+                
+                // Check authentication status by running a simple command
+                match Command::new("claude")
+                    .arg("api")
+                    .arg("models")
+                    .output()
+                {
+                    Ok(auth_output) => {
+                        status.authenticated = auth_output.status.success();
+                        if !auth_output.status.success() {
+                            let stderr = String::from_utf8_lossy(&auth_output.stderr);
+                            if stderr.contains("not authenticated") || stderr.contains("API key") {
+                                status.error = Some("Claude CLI is not authenticated. Please run 'claude auth' to authenticate.".to_string());
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        status.authenticated = false;
+                    }
+                }
+            } else {
+                status.error = Some("Claude CLI returned an error".to_string());
+            }
+        }
+        Err(_) => {
+            status.error = Some("Claude CLI is not installed. Please install it from https://claude.ai/cli".to_string());
+        }
+    }
+    
+    Ok(status)
 }

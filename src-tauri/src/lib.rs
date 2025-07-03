@@ -1,7 +1,7 @@
 mod claude_simple;
 mod commands;
 
-use commands::{abort_session, check_claude_cli, clear_session, create_session, send_message, AppState};
+use commands::{abort_session, check_claude_cli, clear_session, create_session, get_claude_cli_status, send_message, AppState};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -25,7 +25,8 @@ pub fn run() {
             send_message,
             abort_session,
             clear_session,
-            check_claude_cli
+            check_claude_cli,
+            get_claude_cli_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

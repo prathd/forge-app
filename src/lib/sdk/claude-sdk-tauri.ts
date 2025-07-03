@@ -22,6 +22,13 @@ interface ErrorResponse {
   error: string
 }
 
+interface ClaudeCliStatus {
+  installed: boolean
+  version?: string
+  authenticated: boolean
+  error?: string
+}
+
 export class ClaudeSDKTauri {
   private sessions: Map<string, {
     messages: Message[]
@@ -33,6 +40,18 @@ export class ClaudeSDKTauri {
       return await invoke<boolean>('check_claude_cli')
     } catch {
       return false
+    }
+  }
+
+  async getClaudeCliStatus(): Promise<ClaudeCliStatus> {
+    try {
+      return await invoke<ClaudeCliStatus>('get_claude_cli_status')
+    } catch (error: any) {
+      return {
+        installed: false,
+        authenticated: false,
+        error: error.message || 'Failed to check Claude CLI status'
+      }
     }
   }
 
