@@ -47,10 +47,19 @@ export class ClaudeSDKTauri {
     try {
       return await invoke<ClaudeCliStatus>('get_claude_cli_status')
     } catch (error: any) {
+      // Handle permission errors specifically
+      if (error.message?.includes('not allowed') || error.message?.includes('permission')) {
+        return {
+          installed: false,
+          authenticated: false,
+          error: 'Permission denied. The app needs permission to check for Claude CLI. Please restart the app and grant the necessary permissions.'
+        }
+      }
+      
       return {
         installed: false,
         authenticated: false,
-        error: error.message || 'Failed to check Claude CLI status'
+        error: error.error || error.message || 'Failed to check Claude CLI status'
       }
     }
   }
@@ -109,7 +118,7 @@ export class ClaudeSDKTauri {
       }
     })
 
-    const unsubscribeError = await listen<ErrorResponse>('claude-error', (event) => {
+    const unsubscribeError = await listen<ErrorResponse>('claude-error', (_event) => {
       finished = true
       if (resolver) {
         resolver({ value: undefined as any, done: true })
@@ -209,11 +218,11 @@ export class ClaudeSDKTauri {
     }
   }
 
-  setWorkingDirectory(sessionId: string, path: string): void {
+  setWorkingDirectory(_sessionId: string, _path: string): void {
     // This will be passed in query options
   }
 
-  registerMCPExtension(sessionId: string, extension: MCPExtension): void {
+  registerMCPExtension(_sessionId: string, _extension: MCPExtension): void {
     // This will be passed in query options
   }
 }
