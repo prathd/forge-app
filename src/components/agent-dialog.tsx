@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Bot, Search, Hammer, Eye } from 'lucide-react'
+import { Bot, Search, Hammer, Eye, FolderOpen } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +58,7 @@ export function AgentDialog({ open, onOpenChange }: AgentDialogProps) {
   const [name, setName] = useState('')
   const [type, setType] = useState<'task' | 'explorer' | 'builder' | 'review'>('task')
   const [systemPrompt, setSystemPrompt] = useState('')
+  const [workingDirectory, setWorkingDirectory] = useState('')
   
   const { addAgent } = useAgentStore()
 
@@ -69,13 +70,32 @@ export function AgentDialog({ open, onOpenChange }: AgentDialogProps) {
       type,
       status: 'idle',
       systemPrompt: systemPrompt.trim() || undefined,
+      workingDirectory: workingDirectory.trim() || undefined,
     })
     
     // Reset form
     setName('')
     setType('task')
     setSystemPrompt('')
+    setWorkingDirectory('')
     onOpenChange(false)
+  }
+
+  const handleBrowseDirectory = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Working Directory'
+      })
+      
+      if (selected && typeof selected === 'string') {
+        setWorkingDirectory(selected)
+      }
+    } catch (error) {
+      console.error('Failed to open directory dialog:', error)
+    }
   }
 
   return (
@@ -149,6 +169,27 @@ export function AgentDialog({ open, onOpenChange }: AgentDialogProps) {
               onChange={(e) => setSystemPrompt(e.target.value)}
               placeholder="Provide specific instructions for this agent..."
             />
+          </div>
+          
+          <div className="grid gap-2">
+            <Label htmlFor="workingDir">Working Directory (Optional)</Label>
+            <div className="flex gap-2">
+              <Input
+                id="workingDir"
+                value={workingDirectory}
+                onChange={(e) => setWorkingDirectory(e.target.value)}
+                placeholder="/path/to/project"
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={handleBrowseDirectory}
+                title="Browse for directory"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
         

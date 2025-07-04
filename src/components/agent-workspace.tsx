@@ -1,6 +1,6 @@
 'use client'
 
-import { Play, Square, Trash2, RotateCcw, Send, Loader2 } from 'lucide-react'
+import { Play, Square, Trash2, RotateCcw, Send, Loader2, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 export function AgentWorkspace() {
   const { activeAgentId, getAgent, updateAgent, removeAgent } = useAgentStore()
   const [input, setInput] = useState('')
+  const [workingDir, setWorkingDir] = useState('')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const activeAgent = activeAgentId ? getAgent(activeAgentId) : null
   
@@ -34,6 +35,13 @@ export function AgentWorkspace() {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
     }
   }, [messages])
+
+  // Set initial working directory when agent changes
+  useEffect(() => {
+    if (activeAgent?.workingDirectory) {
+      setWorkingDir(activeAgent.workingDirectory)
+    }
+  }, [activeAgent])
 
   if (!activeAgent) {
     return (
@@ -69,6 +77,27 @@ export function AgentWorkspace() {
 
   const handleReset = () => {
     clearMessages()
+  }
+
+  const handleBrowseDirectory = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Working Directory'
+      })
+      
+      if (selected && typeof selected === 'string') {
+        setWorkingDir(selected)
+        setWorkingDirectory(selected)
+        if (activeAgentId) {
+          updateAgent(activeAgentId, { workingDirectory: selected })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to open directory dialog:', error)
+    }
   }
 
   return (
@@ -241,11 +270,25 @@ export function AgentWorkspace() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Working Directory</label>
-                  <Input
-                    placeholder="/path/to/project"
-                    defaultValue={activeAgent.workingDirectory || ''}
-                    onBlur={(e) => setWorkingDirectory(e.target.value)}
-                  />
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      placeholder="/path/to/project"
+                      value={workingDir}
+                      onChange={(e) => setWorkingDir(e.target.value)}
+                      onBlur={(e) => {
+                        setWorkingDirectory(e.target.value)
+                        updateAgent(activeAgent.id, { workingDirectory: e.target.value })
+                      }}
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={handleBrowseDirectory}
+                      title="Browse for directory"
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Git Branch</label>

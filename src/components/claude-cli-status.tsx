@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { CheckCircle, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClaudeSDKTauri } from '@/lib/sdk/claude-sdk-tauri'
 
