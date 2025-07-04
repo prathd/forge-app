@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::async_runtime::Mutex;
 use uuid::Uuid;
+use tokio::sync::mpsc;
+
+use super::cli_process::{ClaudeCliMessage, ClaudeCliOptions, ClaudeCliProcess};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +52,8 @@ pub struct QueryOptions {
 pub struct ClaudeSession {
     pub id: String,
     pub messages: Vec<Message>,
+    pub cli_session_id: Option<String>,
+    pub process: Option<ClaudeCliProcess>,
 }
 
 pub struct ClaudeManager {
@@ -68,6 +73,8 @@ impl ClaudeManager {
         let session = ClaudeSession {
             id: session_id.clone(),
             messages: Vec::new(),
+            cli_session_id: None,
+            process: None,
         };
 
         let mut sessions = self.sessions.lock().await;
@@ -80,13 +87,29 @@ impl ClaudeManager {
         &self,
         session_id: &str,
         prompt: &str,
-        _options: Option<QueryOptions>,
+        options: Option<QueryOptions>,
         tx: tokio::sync::mpsc::Sender<Message>,
     ) -> Result<()> {
-        let mut sessions = self.sessions.lock().await;
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session not found"))?;
+        // Convert QueryOptions to ClaudeCliOptions
+        let cli_options = if let Some(opts) = options {
+            ClaudeCliOptions {
+                model: opts.model,
+                allowed_tools: opts.allowed_tools,
+                disallowed_tools: opts.disallowed_tools,
+                working_directory: opts.cwd,
+            }
+        } else {
+            ClaudeCliOptions::default()
+        };
+
+        // Get session and CLI session ID
+        let cli_session_id = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Session not found"))?;
+            session.cli_session_id.clone()
+        };
 
         // Add user message
         let user_message = Message {
@@ -95,47 +118,152 @@ impl ClaudeManager {
             timestamp: Utc::now(),
             session_id: session_id.to_string(),
         };
-        session.messages.push(user_message.clone());
+        
+        {
+            let mut sessions = self.sessions.lock().await;
+            if let Some(session) = sessions.get_mut(session_id) {
+                session.messages.push(user_message.clone());
+            }
+        }
+        
         let _ = tx.send(user_message).await;
 
-        // For now, simulate a response
-        // In a real implementation, this would call Claude CLI
-        let system_message = Message {
-            role: "system".to_string(),
-            content: "Processing your request...".to_string(),
-            timestamp: Utc::now(),
-            session_id: session_id.to_string(),
-        };
-        let _ = tx.send(system_message).await;
+        // Create channel for CLI messages
+        let (cli_tx, mut cli_rx) = mpsc::channel(100);
+        
+        // Spawn Claude CLI process
+        let process = ClaudeCliProcess::spawn(
+            prompt,
+            cli_session_id.as_deref(),
+            &cli_options,
+            cli_tx,
+        ).await?;
 
-        // Simulate assistant response
-        let assistant_message = Message {
-            role: "assistant".to_string(),
-            content: format!(
-                "I received your message: \"{}\". \n\nTo use real Claude functionality, please ensure:\n1. Claude CLI is installed\n2. You're authenticated with `claude auth`\n3. The CLI is in your PATH\n\nThis is a demo response while we work on the full integration.",
-                prompt
-            ),
-            timestamp: Utc::now(),
-            session_id: session_id.to_string(),
-        };
-        session.messages.push(assistant_message.clone());
-        let _ = tx.send(assistant_message).await;
+        // Store process in session
+        {
+            let mut sessions = self.sessions.lock().await;
+            if let Some(session) = sessions.get_mut(session_id) {
+                session.process = Some(process);
+            }
+        }
 
-        // Send completion
-        let complete_message = Message {
-            role: "system".to_string(),
-            content: "Completed successfully".to_string(),
-            timestamp: Utc::now(),
-            session_id: session_id.to_string(),
-        };
-        let _ = tx.send(complete_message).await;
+        // Process messages from CLI
+        let session_id_clone = session_id.to_string();
+        let tx_clone = tx.clone();
+        let sessions_clone = self.sessions.clone();
+        
+        tokio::spawn(async move {
+            let mut assistant_content = String::new();
+            let mut _cli_session_id: Option<String> = None;
+            let mut is_first_assistant_message = true;
+            
+            while let Some(cli_msg) = cli_rx.recv().await {
+                match cli_msg {
+                    ClaudeCliMessage::System { session_id: sid, .. } => {
+                        if let Some(sid) = sid {
+                            _cli_session_id = Some(sid.clone());
+                            // Update session with CLI session ID
+                            let mut sessions = sessions_clone.lock().await;
+                            if let Some(session) = sessions.get_mut(&session_id_clone) {
+                                session.cli_session_id = Some(sid);
+                            }
+                        }
+                        
+                        // Send initial processing message
+                        let processing_msg = Message {
+                            role: "system".to_string(),
+                            content: "Processing...".to_string(),
+                            timestamp: Utc::now(),
+                            session_id: session_id_clone.clone(),
+                        };
+                        let _ = tx_clone.send(processing_msg).await;
+                    }
+                    ClaudeCliMessage::Assistant { message, .. } => {
+                        // Extract and stream text content immediately
+                        for content in &message.content {
+                            match content {
+                                super::cli_process::ContentBlock::Text { text } => {
+                                    if !text.is_empty() {
+                                        assistant_content.push_str(text);
+                                        
+                                        // Send streaming message
+                                        let stream_msg = Message {
+                                            role: if is_first_assistant_message { 
+                                                is_first_assistant_message = false;
+                                                "assistant".to_string()
+                                            } else {
+                                                "assistant_stream".to_string()
+                                            },
+                                            content: text.clone(),
+                                            timestamp: Utc::now(),
+                                            session_id: session_id_clone.clone(),
+                                        };
+                                        let _ = tx_clone.send(stream_msg).await;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ClaudeCliMessage::Result { is_error, error, .. } => {
+                        if is_error {
+                            let error_msg = Message {
+                                role: "system".to_string(),
+                                content: format!("Error: {}", error.unwrap_or_else(|| "Unknown error".to_string())),
+                                timestamp: Utc::now(),
+                                session_id: session_id_clone.clone(),
+                            };
+                            let _ = tx_clone.send(error_msg).await;
+                        } else {
+                            // Store the complete assistant message in session
+                            if !assistant_content.is_empty() {
+                                let assistant_msg = Message {
+                                    role: "assistant".to_string(),
+                                    content: assistant_content.clone(),
+                                    timestamp: Utc::now(),
+                                    session_id: session_id_clone.clone(),
+                                };
+                                
+                                // Store complete message in session
+                                let mut sessions = sessions_clone.lock().await;
+                                if let Some(session) = sessions.get_mut(&session_id_clone) {
+                                    session.messages.push(assistant_msg);
+                                }
+                            }
+                            
+                            // Send completion message
+                            let complete_msg = Message {
+                                role: "system".to_string(),
+                                content: "Completed successfully".to_string(),
+                                timestamp: Utc::now(),
+                                session_id: session_id_clone.clone(),
+                            };
+                            let _ = tx_clone.send(complete_msg).await;
+                        }
+                        
+                        // Clear process from session
+                        let mut sessions = sessions_clone.lock().await;
+                        if let Some(session) = sessions.get_mut(&session_id_clone) {
+                            if let Some(process) = session.process.take() {
+                                let _ = process.wait().await;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        });
 
         Ok(())
     }
 
     pub async fn abort_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.lock().await;
-        sessions.remove(session_id);
+        if let Some(mut session) = sessions.remove(session_id) {
+            // Abort the CLI process if running
+            if let Some(process) = session.process.take() {
+                process.abort().await?;
+            }
+        }
         Ok(())
     }
 

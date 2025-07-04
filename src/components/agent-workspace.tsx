@@ -110,15 +110,10 @@ export function AgentWorkspace() {
           </p>
         </div>
         <div className="flex gap-2">
-          {activeAgent.status === 'running' || isLoading ? (
+          {(activeAgent.status === 'running' || isLoading) && (
             <Button variant="destructive" onClick={handleStop}>
               <Square className="mr-2 h-4 w-4" />
               Stop
-            </Button>
-          ) : (
-            <Button disabled>
-              <Play className="mr-2 h-4 w-4" />
-              Run
             </Button>
           )}
           <Button variant="outline" onClick={handleReset}>
