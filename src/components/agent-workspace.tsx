@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import { GitBranchSelector } from '@/components/git-branch-selector'
 import { useAgentStore } from '@/lib/store/agent-store'
 import { useAgentRuntime } from '@/hooks/use-agent-runtime'
 import { useState, useRef, useEffect } from 'react'
@@ -284,14 +285,10 @@ export function AgentWorkspace() {
                     </Button>
                   </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Git Branch</label>
-                  <Input
-                    placeholder="main"
-                    defaultValue={activeAgent.branch || ''}
-                    onBlur={(e) => updateAgent(activeAgent.id, { branch: e.target.value })}
-                  />
-                </div>
+                <GitBranchSelector
+                  workingDirectory={workingDir || activeAgent.workingDirectory}
+                  onBranchChange={(branch) => updateAgent(activeAgent.id, { branch })}
+                />
               </div>
             </CardContent>
           </Card>

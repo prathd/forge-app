@@ -3,8 +3,9 @@ mod core;
 mod infrastructure;
 
 use api::commands::{
-    abort_session, check_claude_auth, check_claude_cli, clear_session, create_session,
-    get_claude_cli_status, greet, quick_claude_check, send_message,
+    abort_session, check_claude_auth, check_claude_cli, check_git_status, clear_session,
+    create_session, get_claude_cli_status, git_checkout_branch, git_create_branch,
+    git_stash_changes, greet, quick_claude_check, send_message,
 };
 use infrastructure::state::AppState;
 use std::sync::Arc;
@@ -33,7 +34,11 @@ pub fn run() {
             check_claude_cli,
             check_claude_auth,
             get_claude_cli_status,
-            quick_claude_check
+            quick_claude_check,
+            check_git_status,
+            git_checkout_branch,
+            git_create_branch,
+            git_stash_changes
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
