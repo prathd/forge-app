@@ -150,7 +150,6 @@ impl ClaudeManager {
             let mut is_first_assistant_message = true;
             let mut total_tokens: Option<(u32, u32)> = None;
             let mut last_message_id: Option<String> = None;
-            let mut last_content_length = 0;
             
             while let Some(cli_msg) = cli_rx.recv().await {
                 match cli_msg {
@@ -175,8 +174,8 @@ impl ClaudeManager {
                         let is_same_message = last_message_id.as_ref() == Some(&message.id);
                         if !is_same_message {
                             last_message_id = Some(message.id.clone());
-                            last_content_length = 0;
                             assistant_content.clear();
+                            is_first_assistant_message = true; // Reset for new message
                         }
                         
                         // Extract and stream content immediately
@@ -185,33 +184,66 @@ impl ClaudeManager {
                             match content {
                                 ContentBlock::Text { text } => {
                                     if !text.is_empty() {
-                                        // Only send new content if this is a new message or new content
-                                        let new_content_start = assistant_content.len();
-                                        assistant_content.push_str(text);
-                                        
-                                        if new_content_start >= last_content_length {
-                                            let new_text = &assistant_content[new_content_start..];
-                                            if !new_text.is_empty() {
-                                                // Send streaming message
-                                                let stream_msg = Message {
-                                                    role: if is_first_assistant_message { 
-                                                        is_first_assistant_message = false;
-                                                        "assistant".to_string()
-                                                    } else {
-                                                        "assistant_stream".to_string()
-                                                    },
-                                                    content: new_text.to_string(),
-                                                    timestamp: Utc::now(),
-                                                    session_id: session_id_clone.clone(),
-                                                };
-                                                let _ = tx_clone.send(stream_msg).await;
-                                                last_content_length = assistant_content.len();
-                                            }
+                                        // Check if we've already sent this exact content
+                                        if !is_same_message || !assistant_content.contains(text) {
+                                            assistant_content.push_str(text);
+                                            
+                                            // Send streaming message only if this is new content
+                                            let stream_msg = Message {
+                                                role: if is_first_assistant_message { 
+                                                    is_first_assistant_message = false;
+                                                    "assistant".to_string()
+                                                } else {
+                                                    "assistant_stream".to_string()
+                                                },
+                                                content: text.clone(),
+                                                timestamp: Utc::now(),
+                                                session_id: session_id_clone.clone(),
+                                            };
+                                            let _ = tx_clone.send(stream_msg).await;
                                         }
                                     }
                                 }
-                                ContentBlock::ToolUse { name, input: _, id } => {
-                                    let tool_msg = format!("🔧 Using tool: {} ({})", name, id);
+                                ContentBlock::ToolUse { name, input, id: _ } => {
+                                    // Create a user-friendly tool message
+                                    let tool_msg = match name.as_str() {
+                                        "Read" => {
+                                            if let Some(path) = input.get("file_path").and_then(|v| v.as_str()) {
+                                                format!("📖 Reading file: {}", path)
+                                            } else {
+                                                format!("📖 Reading file")
+                                            }
+                                        }
+                                        "Write" => {
+                                            if let Some(path) = input.get("file_path").and_then(|v| v.as_str()) {
+                                                format!("✏️ Writing file: {}", path)
+                                            } else {
+                                                format!("✏️ Writing file")
+                                            }
+                                        }
+                                        "Edit" => {
+                                            if let Some(path) = input.get("file_path").and_then(|v| v.as_str()) {
+                                                format!("✏️ Editing file: {}", path)
+                                            } else {
+                                                format!("✏️ Editing file")
+                                            }
+                                        }
+                                        "Bash" => {
+                                            if let Some(cmd) = input.get("command").and_then(|v| v.as_str()) {
+                                                let cmd_preview = if cmd.len() > 50 {
+                                                    format!("{}...", &cmd[..50])
+                                                } else {
+                                                    cmd.to_string()
+                                                };
+                                                format!("💻 Running: {}", cmd_preview)
+                                            } else {
+                                                format!("💻 Running command")
+                                            }
+                                        }
+                                        "Task" => format!("🤖 Starting task"),
+                                        _ => format!("🔧 Using {}", name)
+                                    };
+                                    
                                     assistant_content.push_str(&format!("\n{}\n", tool_msg));
                                     
                                     let tool_msg = Message {
@@ -222,35 +254,26 @@ impl ClaudeManager {
                                     };
                                     let _ = tx_clone.send(tool_msg).await;
                                 }
-                                ContentBlock::Thinking { text } => {
-                                    // Optionally show thinking process
-                                    let thinking_msg = format!("💭 Thinking: {}", text);
-                                    let msg = Message {
-                                        role: "system".to_string(),
-                                        content: thinking_msg,
-                                        timestamp: Utc::now(),
-                                        session_id: session_id_clone.clone(),
-                                    };
-                                    let _ = tx_clone.send(msg).await;
+                                ContentBlock::Thinking { .. } => {
+                                    // Don't show thinking process - it's internal to Claude
                                 }
                                 ContentBlock::Image { .. } => {
-                                    let img_msg = "📷 [Image content]".to_string();
-                                    assistant_content.push_str(&format!("\n{}\n", img_msg));
+                                    // Images are shown inline, no need for system message
+                                }
+                                ContentBlock::ServerToolUse { name, .. } => {
+                                    let tool_msg = format!("🔧 Using {}", name);
+                                    assistant_content.push_str(&format!("\n{}\n", tool_msg));
                                     
                                     let msg = Message {
                                         role: "system".to_string(),
-                                        content: img_msg,
+                                        content: tool_msg,
                                         timestamp: Utc::now(),
                                         session_id: session_id_clone.clone(),
                                     };
                                     let _ = tx_clone.send(msg).await;
                                 }
-                                ContentBlock::ServerToolUse { name, .. } |
                                 ContentBlock::McpToolUse { name, .. } => {
-                                    let tool_msg = format!("🔧 Using {}: {}", 
-                                        if matches!(content, ContentBlock::ServerToolUse { .. }) { "server tool" } else { "MCP tool" },
-                                        name
-                                    );
+                                    let tool_msg = format!("🔌 Using MCP: {}", name);
                                     assistant_content.push_str(&format!("\n{}\n", tool_msg));
                                     
                                     let msg = Message {
@@ -262,9 +285,7 @@ impl ClaudeManager {
                                     let _ = tx_clone.send(msg).await;
                                 }
                                 _ => {
-                                    // Handle other content types generically
-                                    let msg = format!("[{:?} content]", content);
-                                    assistant_content.push_str(&format!("\n{}\n", msg));
+                                    // Ignore other content types
                                 }
                             }
                         }
@@ -277,38 +298,25 @@ impl ClaudeManager {
                                     if let Ok(content) = serde_json::from_value::<super::cli_process::ContentBlock>(content_val.clone()) {
                                         use super::cli_process::ContentBlock;
                                         match content {
-                                            ContentBlock::ToolResult { tool_use_id, content, is_error } => {
-                                                let result_msg = if is_error {
-                                                    format!("❌ Tool result ({}): {}", tool_use_id, content.as_deref().unwrap_or("Error"))
-                                                } else {
-                                                    format!("✅ Tool result ({}): {}", tool_use_id, content.as_deref().unwrap_or("Success"))
-                                                };
-                                                
-                                                let msg = Message {
-                                                    role: "system".to_string(),
-                                                    content: result_msg,
-                                                    timestamp: Utc::now(),
-                                                    session_id: session_id_clone.clone(),
-                                                };
-                                                let _ = tx_clone.send(msg).await;
+                                            ContentBlock::ToolResult { tool_use_id: _, content, is_error } => {
+                                                // Only show errors or important results, not file contents
+                                                if is_error {
+                                                    let error_msg = content.as_deref().unwrap_or("Tool error occurred");
+                                                    let msg = Message {
+                                                        role: "system".to_string(),
+                                                        content: format!("❌ {}", error_msg),
+                                                        timestamp: Utc::now(),
+                                                        session_id: session_id_clone.clone(),
+                                                    };
+                                                    let _ = tx_clone.send(msg).await;
+                                                }
+                                                // Don't show successful tool results - they're usually large file contents
                                             }
-                                            ContentBlock::WebSearchToolResult { tool_use_id, .. } => {
-                                                let msg = Message {
-                                                    role: "system".to_string(),
-                                                    content: format!("🔍 Web search result ({})", tool_use_id),
-                                                    timestamp: Utc::now(),
-                                                    session_id: session_id_clone.clone(),
-                                                };
-                                                let _ = tx_clone.send(msg).await;
+                                            ContentBlock::WebSearchToolResult { .. } => {
+                                                // Web search results are shown inline by Claude, no need for system message
                                             }
-                                            ContentBlock::CodeExecutionToolResult { tool_use_id, .. } => {
-                                                let msg = Message {
-                                                    role: "system".to_string(),
-                                                    content: format!("💻 Code execution result ({})", tool_use_id),
-                                                    timestamp: Utc::now(),
-                                                    session_id: session_id_clone.clone(),
-                                                };
-                                                let _ = tx_clone.send(msg).await;
+                                            ContentBlock::CodeExecutionToolResult { .. } => {
+                                                // Code execution results are shown inline by Claude, no need for system message
                                             }
                                             _ => {}
                                         }

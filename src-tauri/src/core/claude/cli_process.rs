@@ -169,9 +169,11 @@ impl ClaudeCliProcess {
         let mut cmd = Command::new("claude");
         
         // Always use streaming JSON format for machine-readable output
+        // Skip permission checks for seamless tool usage
         cmd.arg("--print")
            .arg("--output-format").arg("stream-json")
-           .arg("--verbose");
+           .arg("--verbose")
+           .arg("--dangerously-skip-permissions");
         
         // Add session ID if provided
         if let Some(sid) = session_id {
