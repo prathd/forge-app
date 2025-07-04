@@ -9,7 +9,7 @@ export default function DashboardPage() {
       <div className="px-6 pt-4">
         <ClaudeCliStatus />
       </div>
-      <div className="flex-1">
+      <div className="flex-1 overflow-hidden">
         <AgentWorkspace />
       </div>
     </div>

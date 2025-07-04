@@ -90,14 +90,7 @@ export class ClaudeSDKTauri {
       throw new ClaudeSDKError('Session not found', 'SESSION_NOT_FOUND')
     }
 
-    // Add user message to session
-    const userMessage: Message = {
-      role: 'user',
-      content: prompt,
-      timestamp: new Date(),
-      sessionId
-    }
-    session.messages.push(userMessage)
+    // User message is now handled by agent-runtime to avoid duplication
 
     // Create a queue for messages
     const messageQueue: Message[] = []
@@ -110,6 +103,13 @@ export class ClaudeSDKTauri {
       if (message.sessionId === sessionId) {
         session.messages.push(message)
         messageQueue.push(message)
+        
+        // Check if this is a completion message
+        if (message.role === 'system' && 
+            (message.content.includes('Completed successfully') || 
+             message.content.includes('Error:'))) {
+          finished = true
+        }
         
         if (resolver) {
           resolver({ value: message, done: false })
@@ -142,18 +142,24 @@ export class ClaudeSDKTauri {
         options
       })
 
-      // Yield user message first
-      yield userMessage
-
       // Create async iterator
       while (!finished || messageQueue.length > 0) {
         if (messageQueue.length > 0) {
           yield messageQueue.shift()!
-        } else {
+        } else if (!finished) {
           // Wait for next message
-          await new Promise<IteratorResult<Message>>((resolve) => {
+          const result = await new Promise<IteratorResult<Message>>((resolve) => {
             resolver = resolve
+            // Check if we're already finished while setting up the promise
+            if (finished) {
+              resolve({ value: undefined as any, done: true })
+              resolver = null
+            }
           })
+          if (result.done) break
+        } else {
+          // Finished and no more messages
+          break
         }
       }
     } catch (error: any) {

@@ -51,6 +51,7 @@ Claude Agent Studio (codename: Forge) is a desktop application that provides a p
 
 - **Operating System**: macOS 12+, Windows 10+, or Linux (Ubuntu 20.04+)
 - **Node.js**: Version 18 or higher
+- **Rust**: Version 1.70 or higher (for Tauri backend)
 - **Git**: Version 2.35 or higher
 - **Claude CLI**: Installed and authenticated ([Get Claude CLI](https://docs.anthropic.com/en/docs/claude-code/overview))
 - **pnpm**: Version 8 or higher (install with `npm install -g pnpm`)

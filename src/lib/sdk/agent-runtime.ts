@@ -86,6 +86,16 @@ export class AgentRuntime {
       maxTurns: agent.config.maxTurns || options?.maxTurns,
     }
 
+    // Add user message immediately
+    const userMessage: Message = {
+      role: 'user',
+      content: prompt,
+      timestamp: new Date(),
+      sessionId: agent.sessionId
+    }
+    agent.messages.push(userMessage)
+    this.notifyMessageHandler(agentId, userMessage)
+
     // Create message stream
     async function* messageStream(
       runtime: AgentRuntime

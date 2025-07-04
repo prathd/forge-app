@@ -4,7 +4,6 @@ import { Play, Square, Trash2, RotateCcw, Send, Loader2, FolderOpen } from 'luci
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { useAgentStore } from '@/lib/store/agent-store'
 import { useAgentRuntime } from '@/hooks/use-agent-runtime'
@@ -126,64 +125,64 @@ export function AgentWorkspace() {
         </div>
       </div>
 
-      <Tabs defaultValue="conversation" className="flex-1">
-        <TabsList className="mx-6 mt-4">
+      <Tabs defaultValue="conversation" className="flex flex-1 flex-col overflow-hidden">
+        <TabsList className="mx-6 mt-4 flex-shrink-0">
           <TabsTrigger value="conversation">Conversation</TabsTrigger>
           <TabsTrigger value="output">Output</TabsTrigger>
           <TabsTrigger value="context">Context</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="conversation" className="flex-1 px-6">
-          <Card className="h-full">
-            <CardHeader>
+        <TabsContent value="conversation" className="flex-1 flex flex-col min-h-0 px-6 pb-6">
+          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <CardHeader className="flex-shrink-0">
               <CardTitle>Conversation</CardTitle>
               <CardDescription>
                 Chat with your agent and see the conversation history
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex h-[calc(100%-5rem)] flex-col">
-              <ScrollArea className="flex-1 pr-4" ref={scrollAreaRef}>
-                <div className="space-y-4">
-                  {messages.length === 0 ? (
-                    <div className="text-center text-sm text-muted-foreground">
-                      No messages yet. Start a conversation with your agent.
-                    </div>
-                  ) : (
-                    messages.map((message, index) => (
-                      <div
-                        key={index}
-                        className={cn(
-                          'flex',
-                          message.role === 'user' ? 'justify-end' : 'justify-start'
-                        )}
-                      >
+            <CardContent className="flex-1 flex flex-col min-h-0 p-0">
+              <div className="flex-1 overflow-y-auto px-6" ref={scrollAreaRef}>
+                  <div className="space-y-4 py-4">
+                    {messages.length === 0 ? (
+                      <div className="text-center text-sm text-muted-foreground">
+                        No messages yet. Start a conversation with your agent.
+                      </div>
+                    ) : (
+                      messages.map((message, index) => (
                         <div
+                          key={index}
                           className={cn(
-                            'max-w-[80%] rounded-lg px-4 py-2',
-                            message.role === 'user'
-                              ? 'bg-primary text-primary-foreground'
-                              : message.role === 'assistant'
-                              ? 'bg-muted'
-                              : 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100'
+                            'flex',
+                            message.role === 'user' ? 'justify-end' : 'justify-start'
                           )}
                         >
-                          <div className="text-sm font-medium mb-1">
-                            {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+                          <div
+                            className={cn(
+                              'max-w-[80%] rounded-lg px-4 py-2',
+                              message.role === 'user'
+                                ? 'bg-primary text-primary-foreground'
+                                : message.role === 'assistant'
+                                ? 'bg-muted'
+                                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100'
+                            )}
+                          >
+                            <div className="text-sm font-medium mb-1">
+                              {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+                            </div>
+                            <div className="text-sm whitespace-pre-wrap">{message.content}</div>
                           </div>
-                          <div className="text-sm whitespace-pre-wrap">{message.content}</div>
                         </div>
+                      ))
+                    )}
+                    {error && (
+                      <div className="text-center text-sm text-destructive">
+                        Error: {error}
                       </div>
-                    ))
-                  )}
-                  {error && (
-                    <div className="text-center text-sm text-destructive">
-                      Error: {error}
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-              <div className="mt-4 flex gap-2">
+                    )}
+                  </div>
+              </div>
+              <div className="flex-shrink-0 flex gap-2 border-t p-6">
                 <Input
                   placeholder="Type a message..."
                   value={input}

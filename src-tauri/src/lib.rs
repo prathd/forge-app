@@ -9,9 +9,15 @@ use api::commands::{
 use infrastructure::state::AppState;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing/logging
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+    
+    tracing::info!("Starting Forge application");
+    
     let app_state = Arc::new(Mutex::new(AppState::new()));
 
     tauri::Builder::default()

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 
 #[tauri::command]
 pub async fn create_session(
@@ -27,6 +28,9 @@ pub async fn send_message(
     window: tauri::Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<()> {
+    info!("send_message called - session_id: {}, prompt_length: {}", session_id, prompt.len());
+    debug!("Prompt: {}", prompt);
+    
     let state = state.lock().await;
     let (tx, mut rx) = mpsc::channel(100);
 
@@ -47,9 +51,21 @@ pub async fn send_message(
 
     // Spawn task to handle message forwarding
     tokio::spawn(async move {
+        info!("Started message forwarding task");
+        let mut forwarded_count = 0;
+        
         while let Some(message) = rx.recv().await {
-            let _ = window.emit("claude-message", &message);
+            forwarded_count += 1;
+            debug!("Forwarding message #{} to frontend: role={}, content_length={}", 
+                forwarded_count, message.role, message.content.len());
+            
+            match window.emit("claude-message", &message) {
+                Ok(_) => debug!("Message forwarded successfully"),
+                Err(e) => error!("Failed to emit message to frontend: {}", e),
+            }
         }
+        
+        info!("Message forwarding task completed after {} messages", forwarded_count);
     });
 
     Ok(())
