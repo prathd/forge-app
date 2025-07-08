@@ -12,12 +12,17 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize tracing/logging
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    // Initialize production-ready logging
+    if let Err(e) = core::logging::init() {
+        eprintln!("Failed to initialize logging: {}", e);
+        // Fallback to basic logging
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .init();
+    }
     
     tracing::info!("Starting Forge application");
+    tracing::debug!("Logging configuration: RUST_LOG={}", std::env::var("RUST_LOG").unwrap_or_else(|_| "not set".to_string()));
     
     let app_state = Arc::new(Mutex::new(AppState::new()));
 

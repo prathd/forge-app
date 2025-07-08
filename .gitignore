@@ -29,4 +29,5 @@ out
 
 # Claude
 .claude
-CLAUDE.local.md
+CLAUDE.*
+IMPLEMENTATION_STATUS.md

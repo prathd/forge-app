@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { GitBranch, GitCommit, Plus, RefreshCw, AlertCircle, Check } from 'lucide-react'
+import { GitBranch, GitCommit, Plus, RefreshCw, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -128,12 +128,7 @@ export function GitBranchSelector({ workingDirectory, onBranchChange }: GitBranc
             <SelectContent>
               {gitStatus.branches.map((branch) => (
                 <SelectItem key={branch} value={branch}>
-                  <div className="flex items-center gap-2">
-                    {branch === gitStatus.currentBranch && (
-                      <Check className="h-3 w-3" />
-                    )}
-                    {branch}
-                  </div>
+                  {branch}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,20 +1,24 @@
 'use client'
 
-import { Play, Square, Trash2, RotateCcw, Send, Loader2, FolderOpen } from 'lucide-react'
+import { Play, Square, Trash2, RotateCcw, Send, Loader2, FolderOpen, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { GitBranchSelector } from '@/components/git-branch-selector'
+import { CodeOutput } from '@/components/code-output'
 import { useAgentStore } from '@/lib/store/agent-store'
 import { useAgentRuntime } from '@/hooks/use-agent-runtime'
 import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export function AgentWorkspace() {
   const { activeAgentId, getAgent, updateAgent, removeAgent } = useAgentStore()
   const [input, setInput] = useState('')
   const [workingDir, setWorkingDir] = useState('')
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [copiedAll, setCopiedAll] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const activeAgent = activeAgentId ? getAgent(activeAgentId) : null
   
@@ -28,6 +32,23 @@ export function AgentWorkspace() {
     setWorkingDirectory,
     setSystemPrompt,
   } = useAgentRuntime(activeAgentId)
+  
+  // Extract code outputs from messages
+  const codeOutputs = messages
+    .filter(msg => msg.role === 'system' && 
+      (msg.content.includes('✏️ Writing file:') || msg.content.includes('✏️ Editing file:')))
+    .map((msg, index) => {
+      const match = msg.content.match(/(?:Writing|Editing) file: (.+)/)
+      return {
+        filename: match ? match[1] : `output-${index}.txt`,
+        content: 'File content would be shown here once we track actual file changes',
+        language: match && match[1].endsWith('.ts') ? 'typescript' : 
+                  match && match[1].endsWith('.tsx') ? 'typescript' :
+                  match && match[1].endsWith('.js') ? 'javascript' :
+                  match && match[1].endsWith('.py') ? 'python' :
+                  match && match[1].endsWith('.rs') ? 'rust' : undefined
+      }
+    })
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -137,10 +158,41 @@ export function AgentWorkspace() {
         <TabsContent value="conversation" className="flex-1 flex flex-col min-h-0 px-6 pb-6">
           <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <CardHeader className="flex-shrink-0">
-              <CardTitle>Conversation</CardTitle>
-              <CardDescription>
-                Chat with your agent and see the conversation history
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Conversation</CardTitle>
+                  <CardDescription>
+                    Chat with your agent and see the conversation history
+                  </CardDescription>
+                </div>
+                {messages.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const conversationText = messages
+                        .map(msg => `${msg.role.toUpperCase()}: ${msg.content}`)
+                        .join('\n\n')
+                      navigator.clipboard.writeText(conversationText)
+                      setCopiedAll(true)
+                      setTimeout(() => setCopiedAll(false), 2000)
+                      toast.success('Conversation copied to clipboard')
+                    }}
+                  >
+                    {copiedAll ? (
+                      <>
+                        <Check className="h-3 w-3 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 mr-2" />
+                        Copy All
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0 p-0">
               <div className="flex-1 overflow-y-auto px-6" ref={scrollAreaRef}>
@@ -154,13 +206,13 @@ export function AgentWorkspace() {
                         <div
                           key={index}
                           className={cn(
-                            'flex',
+                            'flex group',
                             message.role === 'user' ? 'justify-end' : 'justify-start'
                           )}
                         >
                           <div
                             className={cn(
-                              'max-w-[80%] rounded-lg px-4 py-2',
+                              'relative max-w-[80%] rounded-lg px-4 py-2',
                               message.role === 'user'
                                 ? 'bg-primary text-primary-foreground'
                                 : message.role === 'assistant'
@@ -168,8 +220,33 @@ export function AgentWorkspace() {
                                 : 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100'
                             )}
                           >
-                            <div className="text-sm font-medium mb-1">
-                              {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="text-sm font-medium">
+                                {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity",
+                                  message.role === 'user' 
+                                    ? "text-primary-foreground hover:bg-primary-foreground/20" 
+                                    : message.role === 'assistant'
+                                    ? "hover:bg-accent"
+                                    : "hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                                )}
+                                onClick={() => {
+                                  navigator.clipboard.writeText(message.content)
+                                  setCopiedIndex(index)
+                                  setTimeout(() => setCopiedIndex(null), 2000)
+                                }}
+                              >
+                                {copiedIndex === index ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
                             </div>
                             <div className="text-sm whitespace-pre-wrap">{message.content}</div>
                           </div>
@@ -211,18 +288,16 @@ export function AgentWorkspace() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="output" className="flex-1 px-6">
-          <Card className="h-full">
-            <CardHeader>
+        <TabsContent value="output" className="flex-1 px-6 pb-6">
+          <Card className="h-full flex flex-col">
+            <CardHeader className="flex-shrink-0">
               <CardTitle>Output</CardTitle>
               <CardDescription>
                 View the code and files generated by your agent
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="text-center text-sm text-muted-foreground">
-                No output yet. Run your agent to see results.
-              </div>
+            <CardContent className="flex-1 overflow-y-auto">
+              <CodeOutput outputs={codeOutputs} />
             </CardContent>
           </Card>
         </TabsContent>
