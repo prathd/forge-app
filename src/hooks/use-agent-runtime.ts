@@ -45,25 +45,7 @@ export function useAgentRuntime(agentId: string | null) {
 
         // Set up message handler
         runtime.current.onMessage(agentId, (message) => {
-          setMessages(prev => {
-            // Handle streaming messages
-            if (message.role === 'assistant_stream') {
-              // Find the last assistant message and append to it
-              const lastIndex = prev.findLastIndex(m => m.role === 'assistant')
-              if (lastIndex !== -1) {
-                const updated = [...prev]
-                updated[lastIndex] = {
-                  ...updated[lastIndex],
-                  content: updated[lastIndex].content + message.content
-                }
-                return updated
-              } else {
-                // Convert first stream to assistant message
-                return [...prev, { ...message, role: 'assistant' }]
-              }
-            }
-            return [...prev, message]
-          })
+          setMessages(prev => [...prev, message])
         })
 
         // Set up status handler

@@ -17,6 +17,31 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="h-full">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  // Default to dark theme
+                  const savedTheme = localStorage.getItem('theme');
+                  const theme = savedTheme || 'dark';
+                  
+                  // Always set the theme class immediately
+                  if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {
+                  // Fallback to dark theme on error
+                  document.documentElement.classList.add('dark');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={`${inter.className} h-full`}>
         <Providers>{children}</Providers>
       </body>

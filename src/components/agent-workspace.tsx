@@ -1,12 +1,12 @@
 'use client'
 
-import { Play, Square, Trash2, RotateCcw, Send, Loader2, FolderOpen, Copy, Check } from 'lucide-react'
+import { Square, Trash2, RotateCcw, Send, Loader2, FolderOpen, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { GitBranchSelector } from '@/components/git-branch-selector'
-import { CodeOutput } from '@/components/code-output'
+import { CodeOutput, type CodeOutput as CodeOutputType } from '@/components/code-output'
 import { useAgentStore } from '@/lib/store/agent-store'
 import { useAgentRuntime } from '@/hooks/use-agent-runtime'
 import { useState, useRef, useEffect } from 'react'
@@ -34,19 +34,20 @@ export function AgentWorkspace() {
   } = useAgentRuntime(activeAgentId)
   
   // Extract code outputs from messages
-  const codeOutputs = messages
+  const codeOutputs: CodeOutputType[] = messages
     .filter(msg => msg.role === 'system' && 
       (msg.content.includes('✏️ Writing file:') || msg.content.includes('✏️ Editing file:')))
-    .map((msg, index) => {
+    .map((msg, index): CodeOutputType => {
       const match = msg.content.match(/(?:Writing|Editing) file: (.+)/)
+      const filename = match?.[1] || `output-${index}.txt`
       return {
-        filename: match ? match[1] : `output-${index}.txt`,
+        filename,
         content: 'File content would be shown here once we track actual file changes',
-        language: match && match[1].endsWith('.ts') ? 'typescript' : 
-                  match && match[1].endsWith('.tsx') ? 'typescript' :
-                  match && match[1].endsWith('.js') ? 'javascript' :
-                  match && match[1].endsWith('.py') ? 'python' :
-                  match && match[1].endsWith('.rs') ? 'rust' : undefined
+        language: filename.endsWith('.ts') ? 'typescript' : 
+                  filename.endsWith('.tsx') ? 'typescript' :
+                  filename.endsWith('.js') ? 'javascript' :
+                  filename.endsWith('.py') ? 'python' :
+                  filename.endsWith('.rs') ? 'rust' : undefined
       }
     })
 

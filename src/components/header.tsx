@@ -4,21 +4,10 @@ import { Settings, Github, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { useState, useEffect } from 'react'
+import { useTheme } from '@/contexts/theme-context'
 
 export function Header() {
-  const [isDark, setIsDark] = useState(false)
-
-  useEffect(() => {
-    const isDarkMode = document.documentElement.classList.contains('dark')
-    setIsDark(isDarkMode)
-  }, [])
-
-  const toggleTheme = () => {
-    const newTheme = !isDark
-    setIsDark(newTheme)
-    document.documentElement.classList.toggle('dark')
-  }
+  const { theme, toggleTheme, mounted } = useTheme()
 
   return (
     <div className="flex h-14 items-center border-b px-4">
@@ -30,11 +19,20 @@ export function Header() {
       </div>
       
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={toggleTheme}>
-          {isDark ? (
-            <Sun className="h-5 w-5" />
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+        >
+          {mounted ? (
+            theme === 'dark' ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            )
           ) : (
-            <Moon className="h-5 w-5" />
+            <div className="h-5 w-5" />
           )}
         </Button>
         <Button variant="ghost" size="icon">

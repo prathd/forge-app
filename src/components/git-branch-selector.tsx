@@ -24,7 +24,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useGitStatus } from '@/hooks/use-git-status'
 import { useGitOperations } from '@/hooks/use-git-operations'
-import { cn } from '@/lib/utils'
 
 interface GitBranchSelectorProps {
   workingDirectory?: string
